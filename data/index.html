@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cama de Inmersión ESP32</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="header">
+  <div class="brand">
+    <div>
+      <span class="eyebrow">Sistema Mecatrónico Agrícola</span>
+      <h1>Cama de Inmersión</h1>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <div class="dht-widget">
+      <div class="dht-box">
+        <span class="dht-mini">TEMPERATURA</span>
+        <div class="dht-value">
+          <span class="dht-icon">🌡️</span>
+          <strong id="temperature">--</strong>
+          <span class="unit">°C</span>
+        </div>
+      </div>
+
+      <div class="dht-box">
+        <span class="dht-mini">HUM. AMBIENTE</span>
+        <div class="dht-value">
+          <span class="dht-icon">💧</span>
+          <strong id="airHumidity">--</strong>
+          <span class="unit">%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-buttons">
+      <button id="btnStop" class="header-btn stop-btn">PARO</button>
+      <button id="btnReset" class="header-btn reset-btn">RESET</button>
+    </div>
+  </div>
+</header>
+
+<section id="systemAlert" class="system-alert hidden">
+  <div class="alert-left">
+    <div class="alert-icon">⚠</div>
+    <div class="alert-texts">
+      <h3 id="alertTitle">Advertencia</h3>
+      <p id="alertMessage">Mensaje</p>
+    </div>
+  </div>
+
+  <div class="alert-actions">
+    <button id="alertActionBtn" class="alert-btn">Aceptar</button>
+  </div>
+</section>
+
+<main class="dashboard">
+  <!-- ===================== PANELES PRINCIPALES ===================== -->
+  <section class="top-panels">
+    <!-- Estado -->
+    <article class="card state-card">
+  <div class="card-title">◎ Estado del ciclo</div>
+
+  <div class="state-panel-layout">
+    <div class="cycle-list" id="cycleList">
+      <div class="cycle-item" data-state="Monitoreando">
+        <span class="step-dot"></span>
+        <div>
+          <strong>Monitoreo</strong>
+          <small>Lectura de sensores</small>
+        </div>
+      </div>
+
+      <div class="cycle-item" data-state="Llenando">
+        <span class="step-dot"></span>
+        <div>
+          <strong>Llenado</strong>
+          <small>Bomba de llenado</small>
+        </div>
+      </div>
+
+      <div class="cycle-item" data-state="Regando por capilaridad">
+        <span class="step-dot"></span>
+        <div>
+          <strong>Capilaridad</strong>
+          <small>Absorción del sustrato</small>
+        </div>
+      </div>
+
+      <div class="cycle-item" data-state="Drenando">
+        <span class="step-dot"></span>
+        <div>
+          <strong>Drenado</strong>
+          <small>Retorno al depósito</small>
+        </div>
+      </div>
+
+      <div class="cycle-item" data-state="Ventilando">
+        <span class="step-dot"></span>
+        <div>
+          <strong>Ventilación</strong>
+          <small>Secado inferior</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="current-state-box" id="currentStateBox">
+      <span class="current-overline">Estado actual</span>
+      <strong id="currentStateTitle">--</strong>
+      <small id="currentStateSubtitle">--</small>
+    </div>
+  </div>
+</article>
+
+    <!-- Humedad promedio -->
+    <article class="card humidity-card">
+      <div class="card-title">◎ Humedad Promedio</div>
+
+      <div class="humidity-orb" id="humidityOrb">
+        <div class="orb-water"></div>
+        <div class="orb-shine"></div>
+        <div class="orb-text">
+          <strong id="avgHumidity">--</strong>
+          <span>%</span>
+        </div>
+      </div>
+
+      <div class="orb-caption">
+        <span>Promedio de los 4 sensores de sustrato</span>
+      </div>
+    </article>
+
+    <!-- Nivel cama -->
+    <article class="card level-card">
+      <div class="card-title">▤ Nivel Cama</div>
+
+      <div class="level-content">
+        <ul class="level-list" id="bedLevelList">
+          <li data-level="Vacío">Vacío</li>
+          <li data-level="Subiendo">Subiendo</li>
+          <li data-level="Lleno">Lleno</li>
+        </ul>
+
+        <div class="mini-tank horizontal">
+          <div class="tank-fill" id="bedFill"></div>
+          <div class="wave"></div>
+        </div>
+      </div>
+    </article>
+
+    <!-- Depósito -->
+    <article class="card tank-card">
+      <div class="card-title">⬡ Depósito Agua</div>
+
+      <div class="level-content">
+        <ul class="level-list" id="tankLevelList">
+          <li data-level="Bajo">Bajo</li>
+          <li data-level="Medio">Medio</li>
+          <li data-level="Alto">Alto</li>
+        </ul>
+
+        <div class="mini-tank vertical">
+          <div class="tank-fill" id="tankFill"></div>
+          <div class="wave"></div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ===================== TABS ===================== -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="supervision">Supervisión</button>
+    <button class="tab" data-tab="control">Control</button>
+    <button class="tab" data-tab="datos">Datos</button>
+  </nav>
+
+  <section class="tab-content active" id="tab-supervision">
+  <div class="supervision-layout">
+
+    <!-- ===================== VISTA PLANTA ===================== -->
+    <div class="placeholder-card supervision-card">
+      <h2>Vista planta</h2>
+
+      <div class="plant-view-refined">
+
+        <!-- SH1 -->
+        <div class="soil-sensor soil-sh1">
+          <div class="soil-circle">
+            <img src="/icons/icon-soil.svg" alt="Sensor humedad SH1">
+          </div>
+          <div class="soil-info">
+            <span>SH1</span>
+            <strong id="valSH1">--%</strong>
+          </div>
+        </div>
+
+        <!-- SH2 -->
+        <div class="soil-sensor soil-sh2">
+          <div class="soil-circle">
+            <img src="/icons/icon-soil.svg" alt="Sensor humedad SH2">
+          </div>
+          <div class="soil-info">
+            <span>SH2</span>
+            <strong id="valSH2">--%</strong>
+          </div>
+        </div>
+
+        <!-- SH3 -->
+        <div class="soil-sensor soil-sh3">
+          <div class="soil-circle">
+            <img src="/icons/icon-soil.svg" alt="Sensor humedad SH3">
+          </div>
+          <div class="soil-info">
+            <span>SH3</span>
+            <strong id="valSH3">--%</strong>
+          </div>
+        </div>
+
+        <!-- SH4 -->
+        <div class="soil-sensor soil-sh4">
+          <div class="soil-circle">
+            <img src="/icons/icon-soil.svg" alt="Sensor humedad SH4">
+          </div>
+          <div class="soil-info">
+            <span>SH4</span>
+            <strong id="valSH4">--%</strong>
+          </div>
+        </div>
+
+        <!-- Cama vista planta -->
+        <div class="bed-plant">
+          <div class="bed-plant-title">Cama</div>
+
+          <div class="bed-grid-lines">
+            <span></span><span></span><span></span><span></span>
+          </div>
+
+          <div class="plant-actuator-row">
+            <div class="plant-actuator plant-fill" id="actFillPumpTop">
+              <img src="/icons/icon-pump.svg" alt="Bomba de llenado">
+              <span>Bomba llenado</span>
+            </div>
+
+            <div class="plant-actuator plant-valve" id="actValveTop">
+              <img src="/icons/icon-valve.svg" alt="Válvula solenoide">
+              <span>Válvula</span>
+            </div>
+
+            <div class="plant-actuator plant-drain" id="actDrainPumpTop">
+              <img src="/icons/icon-pump.svg" alt="Bomba de drenado">
+              <span>Bomba drenado</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ventilación lateral -->
+        <div class="fans-zone side-fans">
+          <div class="fans-zone-label">Ventilación</div>
+
+          <div class="fans-column">
+            <div class="fan-icon-box" id="fan1Top">
+              <img src="/icons/icon-fan.svg" alt="Ventilador 1">
+            </div>
+            <div class="fan-icon-box" id="fan2Top">
+              <img src="/icons/icon-fan.svg" alt="Ventilador 2">
+            </div>
+            <div class="fan-icon-box" id="fan3Top">
+              <img src="/icons/icon-fan.svg" alt="Ventilador 3">
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ===================== VISTA LATERAL ===================== -->
+    <div class="placeholder-card supervision-card">
+      <h2>Vista lateral</h2>
+
+      <div class="side-view-refined">
+
+        <!-- Cama lateral -->
+        <div class="side-row side-bed-row">
+          <div class="side-level-column">
+            <div class="side-level" id="lvlBedHigh">
+              <img src="/icons/icon-level.svg" alt="Sensor nivel cama alto">
+              <span>Cama alto</span>
+            </div>
+
+            <div class="side-level" id="lvlBedLow">
+              <img src="/icons/icon-level.svg" alt="Sensor nivel cama bajo">
+              <span>Cama bajo</span>
+            </div>
+          </div>
+
+          <div class="side-bed-area">
+            <div class="side-bed">
+              <div class="side-bed-water" id="bedSideWater"></div>
+            </div>
+            <div class="side-object-label">Cama</div>
+          </div>
+        </div>
+
+        <!-- Depósito lateral -->
+        <div class="side-row side-tank-row">
+          <div class="side-level-column">
+            <div class="side-level" id="lvlTankHigh">
+              <img src="/icons/icon-level.svg" alt="Sensor nivel depósito alto">
+              <span>Depósito alto</span>
+            </div>
+
+            <div class="side-level" id="lvlTankLow">
+              <img src="/icons/icon-level.svg" alt="Sensor nivel depósito bajo">
+              <span>Depósito bajo</span>
+            </div>
+          </div>
+
+          <div class="side-tank-area">
+            <div class="side-tank">
+              <div class="side-tank-water" id="tankSideWater"></div>
+            </div>
+            <div class="side-object-label">Depósito de agua</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</section>
+
+  <section class="tab-content" id="tab-control">
+  <div class="control-layout">
+
+    <div class="placeholder-card control-card mode-control-card">
+      <h2>Modo de operación</h2>
+
+      <div class="control-mode-switch">
+        <span id="controlManualLabel" class="control-mode-label active">MANUAL</span>
+
+        <label class="control-switch">
+          <input id="controlModeToggle" type="checkbox" onchange="toggleControlMode()">
+          <span class="control-slider"></span>
+        </label>
+
+        <span id="controlAutoLabel" class="control-mode-label">AUTO</span>
+      </div>
+
+      <p id="controlModeText" class="control-description">
+        Control secuencial manual habilitado.
+      </p>
+
+      <button id="startAutoBtn" class="auto-start-btn" onclick="startAutoMode()">
+        EMPEZAR MODO AUTO
+      </button>
+      <small id="autoStartStatus" class="auto-start-status">
+        Selecciona modo AUTO para habilitar el arranque automático.
+      </small>
+    </div>
+
+    <div class="placeholder-card control-card manual-control-card" id="manualControlPanel">
+      <h2>Control manual</h2>
+
+      <div class="manual-sequence-hint">
+        Secuencia permitida:
+        <strong>Llenado → Drenado → Ventilación</strong>
+      </div>
+
+      <div class="manual-actions-grid">
+        <button class="manual-action-card" id="manualFillBtn" onclick="manualControlAction('fill')">
+          <div class="manual-action-icon">💧</div>
+          <div>
+            <strong>Llenado</strong>
+            <span>Activa bomba de llenado</span>
+          </div>
+          <small>D22</small>
+        </button>
+
+        <button class="manual-action-card" id="manualDrainBtn" onclick="manualControlAction('drain')">
+          <div class="manual-action-icon">⬇</div>
+          <div>
+            <strong>Drenado</strong>
+            <span>Activa válvula y bomba drenado</span>
+          </div>
+          <small>D23 + D21</small>
+        </button>
+
+        <button class="manual-action-card" id="manualFanBtn" onclick="manualControlAction('fan')">
+          <div class="manual-action-icon">🌀</div>
+          <div>
+            <strong>Ventilación</strong>
+            <span>Activa ventiladores</span>
+          </div>
+          <small>D19</small>
+        </button>
+      </div>
+
+      <button class="control-secondary-btn" onclick="clearManualControl()">
+        Desenclavar acción web
+      </button>
+    </div>
+
+    <div class="placeholder-card control-card auto-control-card" id="autoControlPanel">
+      <h2>Configuración automática</h2>
+
+      <div class="auto-config-row">
+        <div>
+          <strong>Inicio de llenado</strong>
+          <span>Si la humedad baja de este valor, inicia el ciclo.</span>
+          <small class="saved-threshold">Guardado actual: <b id="savedFillStart">--%</b></small>
+        </div>
+
+        <div class="number-control">
+          <input id="fillStartInput" type="number" inputmode="numeric" min="0" max="100" value="30">
+          <span>%</span>
+        </div>
+      </div>
+
+      <div class="auto-config-row">
+        <div>
+          <strong>Objetivo de riego</strong>
+          <span>Al alcanzar este valor, inicia el drenado.</span>
+          <small class="saved-threshold">Guardado actual: <b id="savedIrrigationTarget">--%</b></small>
+        </div>
+
+        <div class="number-control">
+          <input id="irrigationTargetInput" type="number" inputmode="numeric" min="0" max="100" value="80">
+          <span>%</span>
+        </div>
+      </div>
+
+      <div class="auto-config-row">
+        <div>
+          <strong>Fin de ventilación</strong>
+          <span>Al bajar a este valor, termina el ciclo.</span>
+          <small class="saved-threshold">Guardado actual: <b id="savedVentEnd">--%</b></small>
+        </div>
+
+        <div class="number-control">
+          <input id="ventEndInput" type="number" inputmode="numeric" min="0" max="100" value="75">
+          <span>%</span>
+        </div>
+      </div>
+
+      <button class="control-save-btn" onclick="saveAutoSettings()">
+        Guardar configuración
+      </button>
+    </div>
+
+  </div>
+</section>
+
+<section class="tab-content" id="tab-datos">
+  <div class="data-layout">
+
+    <!-- ===================== HUMEDAD PROMEDIO ===================== -->
+    <div class="placeholder-card data-card data-chart-card">
+      <div class="data-card-header">
+        <div>
+          <h2>Humedad promedio</h2>
+          <p>Últimos 30 minutos registrados para seguimiento del sustrato.</p>
+        </div>
+        <span id="dataAvgNow" class="data-value-pill">--%</span>
+      </div>
+
+      <div class="chart-box">
+        <svg id="avgHumidityChart" viewBox="0 0 100 40" preserveAspectRatio="none"></svg>
+      </div>
+
+      <div class="chart-footer">
+        <span>-30 min</span>
+        <span>Ahora</span>
+      </div>
+    </div>
+
+    <!-- ===================== RESUMEN DEL CICLO ===================== -->
+    <div class="placeholder-card data-card cycle-summary-card">
+      <h2>Resumen del ciclo</h2>
+
+      <div class="cycle-summary-grid">
+        <div class="summary-item">
+          <span>Tiempo en estado actual</span>
+          <strong id="summaryCurrentDuration">--</strong>
+        </div>
+
+        <div class="summary-item">
+          <span>Tiempo de llenado</span>
+          <strong id="summaryFillTime">--</strong>
+        </div>
+
+        <div class="summary-item">
+          <span>Tiempo de capilaridad</span>
+          <strong id="summaryCapillaryTime">--</strong>
+        </div>
+
+        <div class="summary-item">
+          <span>Tiempo de drenado</span>
+          <strong id="summaryDrainTime">--</strong>
+        </div>
+
+        <div class="summary-item">
+          <span>Tiempo de ventilación</span>
+          <strong id="summaryVentTime">--</strong>
+        </div>
+
+        <div class="summary-item">
+          <span>Muestras guardadas</span>
+          <strong id="summarySamples">--</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== HISTORIAL DE EVENTOS ===================== -->
+    <div class="placeholder-card data-card event-log-card">
+      <h2>Historial de eventos</h2>
+
+      <div class="event-table-wrap">
+        <table class="event-table">
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>Estado</th>
+              <th>Humedad</th>
+              <th>Nivel cama</th>
+              <th>Depósito</th>
+            </tr>
+          </thead>
+          <tbody id="eventLogTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===================== DIAGNÓSTICO TÉCNICO ===================== -->
+    <div class="diagnostic-section">
+      <h2 class="diagnostic-title">Diagnóstico técnico</h2>
+
+      <div class="diagnostic-grid">
+        <div class="diagnostic-card">
+          <h3>Sensores de humedad</h3>
+
+          <table class="diagnostic-table">
+            <thead>
+              <tr>
+                <th>Pin</th>
+                <th>Raw</th>
+                <th>%</th>
+              </tr>
+            </thead>
+            <tbody id="diagSoilTable"></tbody>
+          </table>
+        </div>
+
+        <div class="diagnostic-card">
+          <h3>Botones físicos</h3>
+          <div id="diagButtons" class="diagnostic-list"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+</main>
+  <script src="/script.js"></script>
+
+<footer class="project-footer">
+
+  <div class="footer-content">
+
+    <div class="footer-title">
+      <h2>Diseño e Implementación de Sistemas Mecatrónicos</h2>
+      <p>
+        Sistema Automatizado de Camas de Inmersión para Aclimatación Vegetal
+      </p>
+    </div>
+
+    <div class="footer-team">
+
+      <div class="footer-member">
+        <span class="member-name">Cristofer Delgado Urdiera</span>
+        <span class="member-id">A01425451</span>
+      </div>
+
+      <div class="footer-member">
+        <span class="member-name">Jorge Luis Alvarez Martínez</span>
+        <span class="member-id">A01425452</span>
+      </div>
+
+      <div class="footer-member">
+        <span class="member-name">Sanghun You</span>
+        <span class="member-id">A01425128</span>
+      </div>
+
+      <div class="footer-member">
+        <span class="member-name">Edgar Chávez Pineda</span>
+        <span class="member-id">A01276070</span>
+      </div>
+
+      <div class="footer-member">
+        <span class="member-name">Luis Felipe Lara Cabrera</span>
+        <span class="member-id">A01423980</span>
+      </div>
+
+      <div class="footer-member">
+        <span class="member-name">Maximiliano Escobar Mireles</span>
+        <span class="member-id">A01425045</span>
+      </div>
+
+    </div>
+
+  </div>
+
+</footer>
+</body>
+</html>
