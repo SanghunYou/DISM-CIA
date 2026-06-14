@@ -15,8 +15,7 @@ const char* const WIFI_PASSWORD = "12345678";
 const int SOIL_SENSOR_COUNT = 4;
 const int REAL_SOIL_SENSOR_COUNT = 3;
 
-// SH1, SH2, SH3 reales.
-// SH4 se muestra como GPIO39, pero será simulado.
+// SH1, SH2, SH3, SH4
 const int SOIL_SENSOR_PINS[SOIL_SENSOR_COUNT] = {34, 35, 36, 39};
 
 // Calibración individual
@@ -24,14 +23,14 @@ const int SOIL_DRY_RAW[SOIL_SENSOR_COUNT] = {
   3080,  // GPIO34 real
   3170,  // GPIO35 real
   3170,  // GPIO36 real
-  3170   // GPIO39 simulado
+  3170   // GPIO39 real
 };
 
 const int SOIL_WET_RAW[SOIL_SENSOR_COUNT] = {
   1690,  // GPIO34 real
   1600,  // GPIO35 real
   1610,  // GPIO36 real
-  1610   // GPIO39 simulado
+  1610   // GPIO39 real
 };
 
 // ===============================
