@@ -1,4 +1,4 @@
-# Sistema de Cama de Inmersión Automatizada
+# Sistema de Cama de Inmersión Automatizada (CIA)
 
 Proyecto desarrollado para la materia **Diseño e implementación de sistemas mecatrónicos**.  
 El sistema automatiza el proceso de riego por inmersión en una cama de aclimatación vegetal, integrando sensores, actuadores, control con ESP32 e interfaz web local.
