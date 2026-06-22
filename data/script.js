@@ -361,7 +361,15 @@ function renderAlert() {
     alertActionBtn.onclick = () => alertBox.classList.add("hidden");
     return;
   }
-
+  if (alertText && alertText.trim() !== "") {
+    alertBox.classList.remove("hidden");
+    alertBox.classList.remove("warning");
+    alertTitle.textContent = "Aviso del sistema";
+    alertMessage.textContent = alertText;
+    alertActionBtn.textContent = "Entendido";
+    alertActionBtn.onclick = () => alertBox.classList.add("hidden");
+    return;
+  }
   if (apiOnline) {
     alertBox.classList.add("hidden");
   }
@@ -692,7 +700,7 @@ function renderManualControlButtons() {
   if (currentState === "Ventilando") fanBtn.classList.add("active");
 
   const canFill = manualStep === "Llenar cama";
-  const canDrain = manualStep === "Drenar agua";
+  const canDrain = true;
   const canFan = manualStep === "Ventilar" || manualStep === "Llenar cama";
 
   if (!canFill) {

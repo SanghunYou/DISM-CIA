@@ -42,14 +42,12 @@ public:
 
   void setMode(OperationMode mode);
   OperationMode getMode();
-
   SystemState getState();
   ManualStep getManualStep();
 
   const char* getStateName();
   const char* getModeName();
   const char* getManualStepName();
-
   String getAlertMessage();
 
   void resetSystem();
@@ -58,8 +56,8 @@ public:
   void setWebManualCommand(ManualCommand command);
   void clearWebManualCommand();
   void requestWebStop();
-
   ManualCommand getWebManualCommand();
+
   bool isWebStopRequested();
   bool isAutoStarted();
   bool isEmergencyActive();
@@ -75,15 +73,10 @@ private:
   OperationMode currentMode = MODE_MANUAL;
   SystemState currentState = STATE_MONITORING;
   ManualStep manualStep = MANUAL_WAIT_FILL;
-
   ManualCommand webManualCommand = MANUAL_CMD_NONE;
+
   bool webStopRequested = false;
-
-  // En modo automatico, seleccionar AUTO no arranca el ciclo.
-  // El ciclo solo corre despues de /api/startAuto.
   bool autoStarted = false;
-
-  // Fallas pausadas: no cambian currentMode ni currentState.
   bool emergencyActive = false;
   bool errorActive = false;
 
@@ -96,7 +89,6 @@ private:
 
   unsigned long stateStartTime = 0;
   String alertMessage = "";
-
   bool waitingAllManualReleased = false;
 
   void changeState(SystemState newState);
@@ -105,16 +97,15 @@ private:
 
   void runManualMode(const SensorData& data);
   void runAutoMode(const SensorData& data);
+  void runManualDrainUnrestricted(const SensorData& data);
 
   bool timeoutExceeded(unsigned long maxTime);
 
   bool physicalManualFill();
   bool physicalManualDrain();
   bool physicalManualFan();
-
   bool anyPhysicalManualButtonPressed();
   int physicalManualButtonCount();
-
   ManualCommand getActiveManualCommand();
 
   void finishManualStepAndWaitRelease(ManualStep nextStep);

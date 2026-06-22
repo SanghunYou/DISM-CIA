@@ -6,7 +6,6 @@ void StateMachine::begin() {
   currentMode = MODE_MANUAL;
   currentState = STATE_MONITORING;
   manualStep = MANUAL_WAIT_FILL;
-
   stateStartTime = millis();
   alertMessage = "";
 
@@ -15,8 +14,8 @@ void StateMachine::begin() {
   autoStarted = false;
   emergencyActive = false;
   errorActive = false;
-
   waitingAllManualReleased = false;
+  drainExtraTimeActive = false;
 
   autoFillStartHumidity = DEFAULT_FILL_START_HUMIDITY;
   autoIrrigationTargetHumidity = DEFAULT_IRRIGATION_TARGET;
@@ -28,41 +27,36 @@ void StateMachine::begin() {
 void StateMachine::update() {
   SensorData data = sensors.getData();
 
-  // Paro fisico: pausa el sistema sin cambiar modo ni estado.
   if (io.isEmergencyPressed()) {
-    enterEmergency("Paro de emergencia fisico activo. Modo y estado conservados.");
+    enterEmergency("Paro de emergencia fisico activo. Desenclava el paro fisico para continuar. Modo y estado conservados.");
     return;
   }
 
-  // Paro web: pausa el sistema sin cambiar modo ni estado.
   if (webStopRequested) {
-    enterEmergency("Paro solicitado desde pagina web. Modo y estado conservados.");
+    enterEmergency("Paro solicitado desde pagina web. Presiona Reset/Liberar paro web para continuar. Modo y estado conservados.");
     return;
   }
 
-  // Si el paro ya fue liberado, se permite continuar desde el mismo modo/estado.
   if (emergencyActive) {
     emergencyActive = false;
     waitingAllManualReleased = true;
-    alertMessage = "Paro liberado. Se conserva el modo y estado previo.";
+    alertMessage = "Paro liberado. Desenclava todos los botones fisicos antes de continuar. Se conserva el modo y estado previo.";
   }
 
-  // Error de nivel: pausa el sistema sin cambiar modo ni estado.
   if (data.bedLevelError) {
-    enterError("Error: sensores de nivel de cama inconsistentes. Modo y estado conservados.");
+    enterError("Error: sensores de nivel de cama inconsistentes. Revisa flotadores. Modo y estado conservados.");
     return;
   }
 
   if (data.tankLevelError) {
-    enterError("Error: sensores de nivel de deposito inconsistentes. Modo y estado conservados.");
+    enterError("Error: sensores de nivel de deposito inconsistentes. Revisa flotadores. Modo y estado conservados.");
     return;
   }
 
-  // Si el error ya desaparecio, se permite continuar desde el mismo modo/estado.
   if (errorActive) {
     errorActive = false;
     waitingAllManualReleased = true;
-    alertMessage = "Error corregido. Se conserva el modo y estado previo.";
+    alertMessage = "Error corregido. Desenclava todos los botones fisicos antes de continuar. Se conserva el modo y estado previo.";
   }
 
   if (currentMode == MODE_AUTO) {
@@ -81,18 +75,19 @@ void StateMachine::setMode(OperationMode mode) {
   emergencyActive = false;
   errorActive = false;
   waitingAllManualReleased = true;
+  drainExtraTimeActive = false;
 
   if (mode == MODE_AUTO) {
     autoStarted = false;
     currentState = STATE_MONITORING;
     stateStartTime = millis();
-    alertMessage = "Modo automatico seleccionado. Presiona EMPEZAR para iniciar.";
+    alertMessage = "Modo automatico seleccionado. Presiona EMPEZAR para iniciar. Desenclava todos los botones fisicos.";
   } else {
     autoStarted = false;
     currentState = STATE_MONITORING;
     manualStep = MANUAL_WAIT_FILL;
     stateStartTime = millis();
-    alertMessage = "Modo manual activado.";
+    alertMessage = "Modo manual activado. Drenado manual disponible sin restriccion de secuencia. Desenclava todos los botones fisicos.";
   }
 }
 
@@ -126,17 +121,15 @@ String StateMachine::getAlertMessage() {
 
 void StateMachine::resetSystem() {
   actuators.allOff();
-  drainExtraTimeActive = false;
 
+  drainExtraTimeActive = false;
   webManualCommand = MANUAL_CMD_NONE;
   webStopRequested = false;
   emergencyActive = false;
   errorActive = false;
   waitingAllManualReleased = true;
 
-  // Importante: no se cambia currentMode, currentState ni manualStep.
-  alertMessage = "Reset aplicado. Se conserva el modo y estado previo.";
-
+  alertMessage = "Reset aplicado. Desenclava todos los botones fisicos antes de continuar. Se conserva el modo y estado previo.";
   Serial.println("Reset aplicado sin reiniciar modo ni estado.");
 }
 
@@ -150,8 +143,9 @@ void StateMachine::startAutoMode() {
   emergencyActive = false;
   errorActive = false;
   waitingAllManualReleased = true;
+  drainExtraTimeActive = false;
 
-  alertMessage = "Modo automatico iniciado.";
+  alertMessage = "Modo automatico iniciado. Desenclava todos los botones fisicos.";
   Serial.println("Modo automatico iniciado por boton START.");
 }
 
@@ -168,13 +162,24 @@ void StateMachine::setWebManualCommand(ManualCommand command) {
 
   if (webManualCommand == command) {
     webManualCommand = MANUAL_CMD_NONE;
+    alertMessage = "Comando web desenclavado.";
   } else {
     webManualCommand = command;
+
+    if (command == MANUAL_CMD_FILL) {
+      alertMessage = "Comando web: LLENAR enclavado.";
+    } else if (command == MANUAL_CMD_DRAIN) {
+      alertMessage = "Comando web: DRENAR enclavado. Drenado manual sin restriccion de secuencia.";
+    } else if (command == MANUAL_CMD_FAN) {
+      alertMessage = "Comando web: VENTILAR enclavado.";
+    }
   }
 }
 
 void StateMachine::clearWebManualCommand() {
   webManualCommand = MANUAL_CMD_NONE;
+  drainExtraTimeActive = false;
+  alertMessage = "Comando manual web liberado.";
 }
 
 void StateMachine::requestWebStop() {
@@ -245,7 +250,7 @@ void StateMachine::changeState(SystemState newState) {
   stateStartTime = millis();
 
   if (newState != STATE_DRAINING) {
-  drainExtraTimeActive = false;
+    drainExtraTimeActive = false;
   }
 
   Serial.print("Cambio de estado: ");
@@ -322,11 +327,39 @@ ManualCommand StateMachine::getActiveManualCommand() {
 void StateMachine::finishManualStepAndWaitRelease(ManualStep nextStep) {
   actuators.allOff();
   webManualCommand = MANUAL_CMD_NONE;
-
   manualStep = nextStep;
   waitingAllManualReleased = true;
-
   changeState(STATE_MONITORING);
+}
+
+void StateMachine::runManualDrainUnrestricted(const SensorData& data) {
+  currentState = STATE_DRAINING;
+  actuators.startDraining();
+
+  if (data.bedLow) {
+    if (!drainExtraTimeActive) {
+      drainExtraTimeActive = true;
+      drainExtraTimeStart = millis();
+      alertMessage = "Manual: nivel bajo detectado o cama sin agua. Drenando 1 minuto extra.";
+      return;
+    }
+
+    unsigned long elapsed = millis() - drainExtraTimeStart;
+
+    if (elapsed >= EXTRA_DRAIN_TIME_MS) {
+      drainExtraTimeActive = false;
+      finishManualStepAndWaitRelease(MANUAL_WAIT_FAN);
+      alertMessage = "Manual: drenado extra completo. Ahora corresponde VENTILAR. Desenclava todos los botones fisicos.";
+      return;
+    }
+
+    unsigned long remaining = (EXTRA_DRAIN_TIME_MS - elapsed) / 1000;
+    alertMessage = "Manual: drenado extra en proceso. Restan aprox. " + String(remaining) + " s.";
+    return;
+  }
+
+  drainExtraTimeActive = false;
+  alertMessage = "Manual: drenando sin restriccion. Esperando sensor de nivel bajo para iniciar el minuto extra.";
 }
 
 void StateMachine::runManualMode(const SensorData& data) {
@@ -335,7 +368,8 @@ void StateMachine::runManualMode(const SensorData& data) {
   if (physicalManualButtonCount() > 1) {
     actuators.allOff();
     currentState = STATE_MONITORING;
-    alertMessage = "Manual: hay mas de un boton enclavado. Desenclava todos.";
+    drainExtraTimeActive = false;
+    alertMessage = "Manual: hay mas de un boton fisico enclavado. Desenclava todos los botones fisicos.";
     return;
   }
 
@@ -343,13 +377,24 @@ void StateMachine::runManualMode(const SensorData& data) {
     if (anyPhysicalManualButtonPressed() || webManualCommand != MANUAL_CMD_NONE) {
       actuators.allOff();
       currentState = STATE_MONITORING;
-      alertMessage = "Manual: desenclava todos los botones antes de continuar.";
+      drainExtraTimeActive = false;
+      alertMessage = "Manual: desenclava todos los botones fisicos y libera comandos web antes de continuar.";
       return;
     }
 
     waitingAllManualReleased = false;
-    alertMessage = "";
+    alertMessage = "Manual listo.";
   }
+
+  // DRENADO MANUAL SIN RESTRICCION DE SECUENCIA.
+  // Puede activarse desde cualquier paso manual.
+  if (command == MANUAL_CMD_DRAIN) {
+    runManualDrainUnrestricted(data);
+    return;
+  }
+
+  // Si se solto el drenado durante el minuto extra, se cancela el contador.
+  drainExtraTimeActive = false;
 
   // Ventilacion auxiliar libre cuando esta esperando llenar.
   if (manualStep == MANUAL_WAIT_FILL && command == MANUAL_CMD_FAN) {
@@ -359,9 +404,7 @@ void StateMachine::runManualMode(const SensorData& data) {
     return;
   }
 
-  if (manualStep == MANUAL_WAIT_FILL &&
-      currentState == STATE_VENTILATING &&
-      command == MANUAL_CMD_NONE) {
+  if (manualStep == MANUAL_WAIT_FILL && currentState == STATE_VENTILATING && command == MANUAL_CMD_NONE) {
     actuators.allOff();
     currentState = STATE_MONITORING;
     alertMessage = "Manual: ventilacion auxiliar apagada.";
@@ -373,14 +416,14 @@ void StateMachine::runManualMode(const SensorData& data) {
       if (command == MANUAL_CMD_NONE) {
         actuators.allOff();
         currentState = STATE_MONITORING;
-        alertMessage = "Manual: esperando llenar cama.";
+        alertMessage = "Manual: esperando llenar cama. Drenado disponible sin restriccion.";
         return;
       }
 
       if (command != MANUAL_CMD_FILL) {
         actuators.allOff();
         currentState = STATE_MONITORING;
-        alertMessage = "Manual: la siguiente accion permitida es LLENAR.";
+        alertMessage = "Manual: la siguiente accion recomendada es LLENAR. El drenado manual queda permitido sin restriccion.";
         return;
       }
 
@@ -393,12 +436,12 @@ void StateMachine::runManualMode(const SensorData& data) {
 
       if (data.bedHigh) {
         finishManualStepAndWaitRelease(MANUAL_WAIT_DRAIN);
-        alertMessage = "Manual: cama llena. Ahora corresponde DRENAR.";
+        alertMessage = "Manual: cama llena. Ahora corresponde DRENAR. Desenclava todos los botones fisicos.";
         return;
       }
 
       currentState = STATE_FILLING;
-      alertMessage = "";
+      alertMessage = "Manual: llenando cama.";
       actuators.startFilling();
       return;
 
@@ -407,42 +450,15 @@ void StateMachine::runManualMode(const SensorData& data) {
         actuators.allOff();
         currentState = STATE_MONITORING;
         alertMessage = "Manual: esperando drenar.";
-        drainExtraTimeActive = false;
         return;
       }
 
       if (command != MANUAL_CMD_DRAIN) {
         actuators.allOff();
         currentState = STATE_MONITORING;
-        alertMessage = "Manual: la siguiente accion permitida es DRENAR.";
-        drainExtraTimeActive = false;
+        alertMessage = "Manual: la siguiente accion recomendada es DRENAR.";
         return;
       }
-
-      currentState = STATE_DRAINING;
-      actuators.startDraining();
-
-      if (data.bedLow) {
-        if (!drainExtraTimeActive) {
-          drainExtraTimeActive = true;
-          drainExtraTimeStart = millis();
-          alertMessage = "Manual: nivel bajo alcanzado. Drenando tiempo extra.";
-          return;
-        }
-
-        if (millis() - drainExtraTimeStart >= EXTRA_DRAIN_TIME_MS) {
-          drainExtraTimeActive = false;
-          finishManualStepAndWaitRelease(MANUAL_WAIT_FAN);
-          alertMessage = "Manual: drenado extra completo. Ahora corresponde VENTILAR.";
-          return;
-        }
-
-        alertMessage = "Manual: drenado extra en proceso.";
-        return;
-      }
-
-      drainExtraTimeActive = false;
-      alertMessage = "";
       return;
 
     case MANUAL_WAIT_FAN:
@@ -453,26 +469,25 @@ void StateMachine::runManualMode(const SensorData& data) {
           webManualCommand = MANUAL_CMD_NONE;
           manualStep = MANUAL_WAIT_FILL;
           waitingAllManualReleased = false;
-
           changeState(STATE_MONITORING);
           alertMessage = "Manual: ventilacion desenclavada. Secuencia completa.";
           return;
         }
 
         currentState = STATE_MONITORING;
-        alertMessage = "Manual: esperando ventilar.";
+        alertMessage = "Manual: esperando ventilar. Drenado disponible sin restriccion.";
         return;
       }
 
       if (command != MANUAL_CMD_FAN) {
         actuators.allOff();
         currentState = STATE_MONITORING;
-        alertMessage = "Manual: la siguiente accion permitida es VENTILAR.";
+        alertMessage = "Manual: la siguiente accion recomendada es VENTILAR. Drenado manual sigue disponible.";
         return;
       }
 
       currentState = STATE_VENTILATING;
-      alertMessage = "";
+      alertMessage = "Manual: ventilando.";
       actuators.startVentilating();
       return;
   }
@@ -567,7 +582,6 @@ void StateMachine::runAutoMode(const SensorData& data) {
         enterError("Error: tiempo maximo de drenado excedido. Modo y estado conservados.");
         return;
       }
-
       break;
 
     case STATE_EMERGENCY:
@@ -580,57 +594,30 @@ void StateMachine::runAutoMode(const SensorData& data) {
 
 const char* StateMachine::stateToString(SystemState state) {
   switch (state) {
-    case STATE_MONITORING:
-      return "Monitoreando humedad";
-
-    case STATE_FILLING:
-      return "Llenando";
-
-    case STATE_CAPILLARY_IRRIGATION:
-      return "Regando por capilaridad";
-
-    case STATE_DRAINING:
-      return "Drenando";
-
-    case STATE_VENTILATING:
-      return "Ventilando";
-
-    case STATE_EMERGENCY:
-      return "Paro";
-
-    case STATE_ERROR:
-      return "Error";
-
-    default:
-      return "Desconocido";
+    case STATE_MONITORING: return "Monitoreando humedad";
+    case STATE_FILLING: return "Llenando";
+    case STATE_CAPILLARY_IRRIGATION: return "Regando por capilaridad";
+    case STATE_DRAINING: return "Drenando";
+    case STATE_VENTILATING: return "Ventilando";
+    case STATE_EMERGENCY: return "Paro";
+    case STATE_ERROR: return "Error";
+    default: return "Desconocido";
   }
 }
 
 const char* StateMachine::modeToString(OperationMode mode) {
   switch (mode) {
-    case MODE_MANUAL:
-      return "Manual";
-
-    case MODE_AUTO:
-      return "Automatico";
-
-    default:
-      return "Desconocido";
+    case MODE_MANUAL: return "Manual";
+    case MODE_AUTO: return "Automatico";
+    default: return "Desconocido";
   }
 }
 
 const char* StateMachine::manualStepToString(ManualStep step) {
   switch (step) {
-    case MANUAL_WAIT_FILL:
-      return "Llenar cama";
-
-    case MANUAL_WAIT_DRAIN:
-      return "Drenar agua";
-
-    case MANUAL_WAIT_FAN:
-      return "Ventilar";
-
-    default:
-      return "Desconocido";
+    case MANUAL_WAIT_FILL: return "Llenar cama";
+    case MANUAL_WAIT_DRAIN: return "Drenar agua";
+    case MANUAL_WAIT_FAN: return "Ventilar";
+    default: return "Desconocido";
   }
 }
