@@ -81,10 +81,10 @@ const int DEFAULT_VENT_END_HUMIDITY = 75;
 // Timeouts de seguridad
 // Ajustar después de pruebas reales
 // ===============================
-const unsigned long MAX_FILL_TIME_MS = 700000;       
-const unsigned long MAX_CAPILLARY_TIME_MS = 700000;  
-const unsigned long MAX_DRAIN_TIME_MS = 700000;  
-const unsigned long MAX_VENT_TIME_MS = 700000;   
+const unsigned long MAX_FILL_TIME_MS = 7000000;       
+const unsigned long MAX_CAPILLARY_TIME_MS = 7000000;  
+const unsigned long MAX_DRAIN_TIME_MS = 7000000;  
+const unsigned long MAX_VENT_TIME_MS = 7000000;   
 
 // ===============================
 // Intervalos

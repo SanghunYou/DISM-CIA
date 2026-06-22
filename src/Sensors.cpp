@@ -4,13 +4,10 @@ Sensors sensors;
 
 void Sensors::begin() {
   analogReadResolution(12);
-
-  // Inicializar sensores reales: GPIO34, GPIO35, GPIO36
   for (int i = 0; i < REAL_SOIL_SENSOR_COUNT; i++) {
     pinMode(SOIL_SENSOR_PINS[i], INPUT);
   }
 
-  // Inicializar todos los valores, incluyendo el simulado GPIO39
   for (int i = 0; i < SOIL_SENSOR_COUNT; i++) {
     data.soilRaw[i] = 0;
     data.soilPercent[i] = 0;
@@ -60,14 +57,9 @@ int Sensors::soilRawToPercent(int raw, int sensorIndex) {
 void Sensors::updateSoilSensors() {
   static int currentSensorIndex = 0;
 
-  // ===============================
-  // Leer solo UN sensor real por ciclo
-  // GPIO34 -> GPIO35 -> GPIO36 -> GPIO34 ...
-  // ===============================
 
   int pin = SOIL_SENSOR_PINS[currentSensorIndex];
 
-  // Lectura doble para estabilizar un poco el ADC
   analogRead(pin);
   delayMicroseconds(80);
 
@@ -81,12 +73,6 @@ void Sensors::updateSoilSensors() {
   if (currentSensorIndex >= REAL_SOIL_SENSOR_COUNT) {
     currentSensorIndex = 0;
   }
-
-  // ===============================
-  // Sensor 4 simulado: GPIO39
-  // No se lee físicamente.
-  // Se calcula a partir de los 3 sensores reales.
-  // ===============================
 
   int sumRawReal = 0;
   int sumPercentReal = 0;
@@ -104,10 +90,6 @@ void Sensors::updateSoilSensors() {
 
   data.soilRaw[3] = simulatedRaw;
   data.soilPercent[3] = simulatedPercent;
-
-  // ===============================
-  // Promedio total: 3 reales + 1 simulado
-  // ===============================
 
   int sumPercentTotal = 0;
 
